@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="mainStyle.css">
+    <title>Memory Card — Найди пару</title>
+
+</head>
+<body>
+<div class="game-container">
+    <div class="game-panel">
+        <div class="game-header">
+            <div class="difficulty-box">
+                <button data-diff="easy" class="difficulty-btn active">Лёгкая</button>
+                <button data-diff="medium" class="difficulty-btn">Средняя</button>
+                <button data-diff="hard" class="difficulty-btn">Высокая</button>
+            </div>
+            <div class="timer-box">
+                <span>Таймер</span> <span id="timerDisplay">00:00</span>
+            </div>
+            <div class="pairs-box">
+                <span>Пары</span> <span id="pairsCountDisplay">0</span> / <span id="totalPairsSpan">0</span>
+            </div>
+            <div class="status-area">
+                <div class="message" id="gameMessage">Нажми "Старт"</div>
+                <button class="start-btn" id="startGameBtn">Старт</button>
+                <button class="reset-btn" id="resetGameBtn">Сброс</button>
+            </div>
+        </div>
+
+        <div id="cardsGrid" class="cards-grid"></div>
+        <div class="footer-info">Memory Card · выбери сложность и нажми СТАРТ</div>
+    </div>
+</div>
+
+<script>
+    const BASE_PAIRS = {
+        easy: 4,
+        medium: 6,
+        hard: 8
+    };
+    const BASE_TIME_SEC = {
+        easy: 30,
+        medium: 45,
+        hard: 60
+    };
+
+    function getDifficultyParams(difficulty) {
+        let basePairs = BASE_PAIRS[difficulty];
+        let baseTime = BASE_TIME_SEC[difficulty];
+        let finalPairs = Math.floor(basePairs * 1.5);
+        let finalTime = Math.ceil(baseTime * 1.3);
+        if (finalPairs < 2) finalPairs = 2;
+        return { pairs: finalPairs, timeSec: finalTime };
+    }
+    const CARD_SYMBOLS = [
+        "★", "☆", "✿", "❀", "●", "◉", "◆", "◇", "▲", "△", "■", "□", "♥", "♡", "♠", "♤", "♣", "♧", "✚", "✖", "⌂", "☀", "☾", "☼", "◈", "▣", "◤", "◥", "◢", "◣", "⚘", "⚚", "⍟", "⊕", "⊞", "⊛", "⬟", "⬚", "❖", "❋", "⟡", "⨀"
+    ];
+    let currentDifficulty = "easy";
+    let pairsCount = 6;
+    let cardsData = [];
+    let cardElements = new Map();
+    let openedCardsIndex = [];
+    let lockBoard = false;
+    let timerSeconds = 0;
+    let timerInterval = null;
+    let gameActive = false;
+    let matchedPairs = 0;
+    
+    const cardsGridDiv = document.getElementById("cardsGrid");
+    const timerDisplaySpan = document.getElementById("timerDisplay");
+    const pairsCountDisplaySpan = document.getElementById("pairsCountDisplay");
+    const totalPairsSpan = document.getElementById("totalPairsSpan");
+    const gameMessageSpan = document.getElementById("gameMessage");
+    const startBtn = document.getElementById("startGameBtn");
+    const resetBtn = document.getElementById("resetGameBtn");
+    const diffBtns = document.querySelectorAll(".difficulty-btn");
+    function formatTime(seconds) {
+        let mins = Math.floor(seconds / 60);
+        let secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    function updateTimerUI() {
+        timerDisplaySpan.innerText = formatTime(timerSeconds);
+    }
+
+    function updatePairsUI() {
+        pairsCountDisplaySpan.innerText = matchedPairs;
+        totalPairsSpan.innerText = pairsCount;
+    }
+
+    function stopTimer() {
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+    }
+
+    function startTimer(initialSeconds) {
+        stopTimer();
+        timerSeconds = initialSeconds;
+        updateTimerUI();
+        if (timerSeconds <= 0) {
+            if (gameActive) loseGame();
+            return;
+        }
+        timerInterval = setInterval(() => {
+            if (!gameActive) return;
+            if (lockBoard) return;
+            if (timerSeconds <= 1) {
+                timerSeconds = 0;
+                updateTimerUI();
+                stopTimer();
+                if (gameActive && matchedPairs < pairsCount) {
+                    loseGame();
+                }
+            } else {
+                timerSeconds--;
+                updateTimerUI();
+            }
+        }, 1000);
+    }
+
+    function loseGame() {
+        if (!gameActive) return;
+        gameActive = false;
+        stopTimer();
+        lockBoard = true;
+        gameMessageSpan.innerText = "Время вышло! Нажми «Старт» заново";
+    }
+
+    function winGame() {
+        if (!gameActive) return;
+        gameActive = false;
+        stopTimer();
+        lockBoard = true;
+        gameMessageSpan.innerText = "ПОБЕДА! Отличная память!";
+    }
+
+    function checkWin() {
+        if (matchedPairs === pairsCount) {
+            winGame();
+        }
+    }
+    function matchSuccess(idxA, idxB) {
+        cardsData[idxA].matched = true;
+        cardsData[idxB].matched = true;
+        let cardA = cardElements.get(idxA);
+        let cardB = cardElements.get(idxB);
+        if (cardA) {
+            cardA.classList.add("matched");
+            cardA.classList.remove("flipped");
+        }
+        if (cardB) {
+            cardB.classList.add("matched");
+            cardB.classList.remove("flipped");
+        }
+        matchedPairs++;
+        updatePairsUI();
+        openedCardsIndex = [];
+        lockBoard = false;
+        checkWin();
+    }
+    
+    function matchFailed(idxA, idxB) {
+        setTimeout(() => {
+            if (!cardsData[idxA].matched && cardsData[idxA].flipped === true) {
+                cardsData[idxA].flipped = false;
+                let elA = cardElements.get(idxA);
+                if (elA) elA.classList.remove("flipped");
+            }
+            if (!cardsData[idxB].matched && cardsData[idxB].flipped === true) {
+                cardsData[idxB].flipped = false;
+                let elB = cardElements.get(idxB);
+                if (elB) elB.classList.remove("flipped");
+            }
+            openedCardsIndex = [];
+            lockBoard = false;
+        }, 700);
+    }
+
+    function onCardClick(clickedIndex) {
+        if (!gameActive) return;
+        if (lockBoard) return;
+        
+        const card = cardsData[clickedIndex];
+        if (card.matched) return;
+        if (card.flipped) return;
+        if (openedCardsIndex.length >= 2) return;
+        
+        card.flipped = true;
+        let cardElement = cardElements.get(clickedIndex);
+        if (cardElement) cardElement.classList.add("flipped");
+        
+        openedCardsIndex.push(clickedIndex);
+        
+        if (openedCardsIndex.length === 2) {
+            lockBoard = true;
+            const idx1 = openedCardsIndex[0];
+            const idx2 = openedCardsIndex[1];
+            const value1 = cardsData[idx1].value;
+            const value2 = cardsData[idx2].value;
+            
+            if (value1 === value2) {
+                matchSuccess(idx1, idx2);
+            } else {
+                matchFailed(idx1, idx2);
+            }
+        }
+    }
+    function renderGrid() {
+        cardsGridDiv.innerHTML = "";
+        cardElements.clear();
+        
+        const totalCards = cardsData.length;
+        let columns = 4;
+        if (totalCards <= 8) columns = 4;
+        else if (totalCards <= 16) columns = 4;
+        else if (totalCards <= 24) columns = 6;
+        else columns = 6;
+        
+        if (totalCards === 12) columns = 4;
+        if (totalCards === 18) columns = 6;
+        
+        cardsGridDiv.style.gridTemplateColumns = `repeat(${columns}, minmax(75px, 100px))`;
+        
+        cardsData.forEach((card, idx) => {
+            const cardDiv = document.createElement("div");
+            cardDiv.className = "card";
+            if (card.flipped) cardDiv.classList.add("flipped");
+            if (card.matched) cardDiv.classList.add("matched");
+            
+            const frontDiv = document.createElement("div");
+            frontDiv.className = "front";
+            frontDiv.innerText = card.value;
+            
+            const backDiv = document.createElement("div");
+            backDiv.className = "back";
+            
+            cardDiv.appendChild(frontDiv);
+            cardDiv.appendChild(backDiv);
+            
+            cardDiv.addEventListener("click", (e) => {
+                e.stopPropagation();
+                onCardClick(idx);
+            });
+            
+            cardsGridDiv.appendChild(cardDiv);
+            cardElements.set(idx, cardDiv);
+        });
+    }
+    function createShuffledCards() {
+        const { pairs } = getDifficultyParams(currentDifficulty);
+        pairsCount = pairs;
+        const totalPairs = pairsCount;
+        
+        let selectedIcons = CARD_SYMBOLS.slice(0, totalPairs);
+        let rawDeck = [];
+        for (let i = 0; i < selectedIcons.length; i++) {
+            rawDeck.push({ value: selectedIcons[i], matched: false, flipped: false });
+            rawDeck.push({ value: selectedIcons[i], matched: false, flipped: false });
+        }
+        
+        for (let i = rawDeck.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [rawDeck[i], rawDeck[j]] = [rawDeck[j], rawDeck[i]];
+        }
+        
+        return rawDeck.map((card, idx) => ({
+            id: idx,
+            value: card.value,
+            matched: false,
+            flipped: false
+        }));
+    }
+    function prepareGame(keepMessage = false) {
+        stopTimer();
+        gameActive = false;
+        lockBoard = false;
+        openedCardsIndex = [];
+        matchedPairs = 0;
+        
+        cardsData = createShuffledCards();
+        updatePairsUI();
+        
+        const { timeSec } = getDifficultyParams(currentDifficulty);
+        timerSeconds = timeSec;
+        updateTimerUI();
+        
+        renderGrid();
+        
+        if (!keepMessage) {
+            gameMessageSpan.innerText = "Выбери сложность и нажми СТАРТ";
+        }
+    }
+    
+    function startGame() {
+        if (gameActive) return;
+        
+        prepareGame(true);
+        
+        gameActive = true;
+        lockBoard = false;
+        openedCardsIndex = [];
+        matchedPairs = 0;
+        updatePairsUI();
+        
+        const { timeSec } = getDifficultyParams(currentDifficulty);
+        timerSeconds = timeSec;
+        updateTimerUI();
+        
+        startTimer(timerSeconds);
+        
+        gameMessageSpan.innerText = "Игра началась! Найди все пары!";
+        
+        for (let i = 0; i < cardsData.length; i++) {
+            cardsData[i].flipped = false;
+            cardsData[i].matched = false;
+            const el = cardElements.get(i);
+            if (el) {
+                el.classList.remove("flipped", "matched");
+            }
+        }
+        matchedPairs = 0;
+        updatePairsUI();
+        renderGrid();
+    }
+    
+    function resetGame() {
+        stopTimer();
+        gameActive = false;
+        lockBoard = false;
+        openedCardsIndex = [];
+        
+        cardsData = createShuffledCards();
+        matchedPairs = 0;
+        updatePairsUI();
+        
+        const { timeSec } = getDifficultyParams(currentDifficulty);
+        timerSeconds = timeSec;
+        updateTimerUI();
+        
+        renderGrid();
+        
+        gameMessageSpan.innerText = "Игра сброшена. Нажми СТАРТ чтобы играть!";
+    }
+    
+    function changeDifficulty(level) {
+        if (gameActive) {
+            stopTimer();
+            gameActive = false;
+        }
+        currentDifficulty = level;
+        diffBtns.forEach(btn => {
+            if (btn.getAttribute("data-diff") === level) {
+                btn.classList.add("active");
+            } else {
+                btn.classList.remove("active");
+            }
+        });
+        resetGame();
+    }
+
+    startBtn.addEventListener("click", () => {
+        startGame();
+    });
+    
+    resetBtn.addEventListener("click", () => {
+        if (gameActive) {
+            stopTimer();
+            gameActive = false;
+        }
+        resetGame();
+    });
+    
+    diffBtns.forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            const difficulty = btn.getAttribute("data-diff");
+            if (difficulty === currentDifficulty) return;
+            changeDifficulty(difficulty);
+        });
+    });
+
+    currentDifficulty = "easy";
+    diffBtns.forEach(btn => {
+        if (btn.getAttribute("data-diff") === "easy") btn.classList.add("active");
+        else btn.classList.remove("active");
+    });
+    prepareGame();
+</script>
+</body>
+</html>
+
