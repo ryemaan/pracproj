@@ -3,7 +3,7 @@ const fs = require('fs');
 const { exec } = require('child_process');
 
 const hostname = '192.168.10.254';
-const port = 3001;
+const port = 3002;
 
 const server = http.createServer((req, res) => {
   fs.readFile('index.html', (err, data) => {
