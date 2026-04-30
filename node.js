@@ -23,12 +23,11 @@ server.listen(port, hostname, () => {
   console.log(`Server running at http://${hostname}:${port}/`);
   
   const url = `http://${hostname}:${port}/`;
-  // Для Windows
   if (process.platform === 'win32') {
     exec(`start ${url}`);
-  } 
-}
-  else {
+  } else if (process.platform === 'darwin') {
+    exec(`open ${url}`);
+  } else {
     exec(`xdg-open ${url}`);
   }
 });
