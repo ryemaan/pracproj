@@ -10,7 +10,7 @@ const server = http.createServer((req, res) => {
     if (err) {
       res.statusCode = 500;
       res.setHeader('Content-Type', 'text/plain');
-      res.end('Error loading index.html');
+      res.end('Error loading main.html');
       return;
     }
     res.statusCode = 200;
