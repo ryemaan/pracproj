@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const hostname = '192.168.10.204';
-const port = 3002;
+const port = 3005;
 
 const server = http.createServer((req, res) => {
   console.log('Запрос:', req.url);
