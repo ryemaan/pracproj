@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const { exec } = require('child_process');
 
-const hostname = '192.168.10.254';
+const hostname = '192.168.10.235';
 const port = 3002;
 
 const server = http.createServer((req, res) => {
