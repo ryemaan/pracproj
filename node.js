@@ -27,7 +27,7 @@ server.listen(port, hostname, () => {
   if (process.platform === 'win32') {
     exec(`start ${url}`);
   } 
-  } 
+}
   else {
     exec(`xdg-open ${url}`);
   }
